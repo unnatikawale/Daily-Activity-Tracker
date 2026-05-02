@@ -15,6 +15,12 @@ Route::post('/contact', [ContactController::class, 'store'])->name('contact.stor
 
 Route::get('/dashboard', [ActivityController::class, 'index'])->middleware('auth')->name('dashboard');
 
+// Monthly tracker route
+Route::get('/monthly-tracker', [ActivityController::class, 'monthlyTracker'])->name('monthly-tracker');
+
+// Test monthly tracker route without authentication
+Route::get('/test-monthly-tracker', [ActivityController::class, 'monthlyTracker']);
+
 // Temporary dashboard route without authentication for testing
 Route::get('/test-dashboard', [ActivityController::class, 'index']);
 
@@ -54,6 +60,13 @@ Route::middleware('auth')->group(function () {
 
 // Move copy route outside auth for testing
 Route::post('/activities/copy', [ActivityController::class, 'copyActivities'])->name('activities.copy');
+
+// Monthly activities routes
+Route::post('/monthly-activities/store', [ActivityController::class, 'storeMonthlyActivity'])->name('monthly-activities.store');
+Route::post('/activities/toggle-by-title-date', [ActivityController::class, 'toggleActivityByTitleDate']);
+
+// Test route for monthly activities without authentication
+Route::post('/test-monthly-activities/store', [ActivityController::class, 'storeMonthlyActivity']);
 
 // Add a simple test route to check authentication
 Route::get('/test-auth', function() {

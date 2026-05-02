@@ -66,6 +66,99 @@ class ActivityController extends Controller
     }
 
     /**
+     * Display the monthly tracker.
+     */
+    public function monthlyTracker(Request $request)
+    {
+        $month = $request->input('month', Carbon::now()->format('Y-m'));
+        $userId = Auth::id();
+        
+        // For testing, if no user, use user ID 1
+        if (!$userId) {
+            $userId = 1;
+        }
+        
+        // Debug: Check what's in the database
+        \Log::info('Querying monthly activities:', [
+            'user_id' => $userId,
+            'month' => $month,
+            'month_format' => Carbon::parse($month . '-01')->format('Y-m-d')
+        ]);
+        
+        // Get all monthly activities for the user (or all activities for testing)
+        // Parse the month to get year and month for comparison
+        $carbonMonth = Carbon::parse($month . '-01');
+        $year = $carbonMonth->year;
+        $monthNum = $carbonMonth->month;
+        
+        if (request()->is('test-monthly-tracker') || !Auth::check()) {
+            // For testing, get all monthly activities regardless of user
+            $monthlyActivities = \App\Models\MonthlyActivity::whereYear('month', $year)
+                ->whereMonth('month', $monthNum)
+                ->get();
+        } else {
+            // For authenticated users, get only their activities
+            $monthlyActivities = \App\Models\MonthlyActivity::where('user_id', $userId)
+                ->whereYear('month', $year)
+                ->whereMonth('month', $monthNum)
+                ->get();
+        }
+
+        // Debug: Log the activities we found
+        \Log::info('Monthly activities for user ' . $userId . ' in ' . $month . ':', [
+            'monthly_activities_count' => $monthlyActivities->count(),
+            'activities' => $monthlyActivities->pluck('title')->toArray(),
+            'is_authenticated' => Auth::check(),
+            'route' => request()->path()
+        ]);
+            
+        // Get all days in the month
+        $date = Carbon::parse($month . '-01');
+        $daysInMonth = $date->daysInMonth;
+        $days = [];
+        
+        for ($day = 1; $day <= $daysInMonth; $day++) {
+            $currentDate = $date->copy()->day($day);
+            $days[] = [
+                'date' => $currentDate,
+                'day' => $day,
+                'weekday' => $currentDate->format('D'),
+                'is_weekend' => in_array($currentDate->dayOfWeek, [0, 6]) // Sunday=0, Saturday=6
+            ];
+        }
+        
+        // Get completion status for each activity and day from the new completion table
+        $completionData = [];
+        if ($monthlyActivities->isNotEmpty()) {
+            foreach ($monthlyActivities as $activity) {
+                $activityKey = $activity->id;
+                $completionData[$activityKey] = [];
+                
+                // Get all completions for this monthly activity in one query
+                $completions = \App\Models\MonthlyActivityCompletion::where('monthly_activity_id', $activity->id)
+                    ->where('user_id', $userId)
+                    ->whereBetween('date', [$date->copy()->startOfMonth()->format('Y-m-d'), $date->copy()->endOfMonth()->format('Y-m-d')])
+                    ->get()
+                    ->keyBy(function($item) {
+                        return \Carbon\Carbon::parse($item->date)->day;
+                    });
+                
+                for ($day = 1; $day <= $daysInMonth; $day++) {
+                    $completionData[$activityKey][$day] = isset($completions[$day]) ? $completions[$day]->completed : false;
+                }
+            }
+        }
+        
+        return view('monthly-tracker', [
+            'month' => $month,
+            'days' => $days,
+            'monthlyActivities' => $monthlyActivities,
+            'completionData' => $completionData,
+            'monthName' => $date->format('F Y')
+        ]);
+    }
+
+    /**
      * Show the form for creating a new resource.
      */
     public function create()
@@ -362,6 +455,156 @@ class ActivityController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Copy failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a new monthly activity.
+     */
+    public function storeMonthlyActivity(Request $request)
+    {
+        try {
+            $request->validate([
+                'title' => 'required|string|max:255',
+                'description' => 'nullable|string|max:1000',
+                'month' => 'required|date'
+            ]);
+
+            $userId = Auth::id();
+            
+            // For testing, if no user, use a default user ID
+            if (!$userId) {
+                $userId = 1; // Use user ID 1 for testing
+            }
+
+            // Check if activity already exists for this month (only in monthly_activities table)
+            $carbonMonth = Carbon::parse($request->month);
+            $year = $carbonMonth->year;
+            $monthNum = $carbonMonth->month;
+            
+            $existingActivity = \App\Models\MonthlyActivity::where('user_id', $userId)
+                                                          ->where('title', $request->title)
+                                                          ->whereYear('month', $year)
+                                                          ->whereMonth('month', $monthNum)
+                                                          ->first();
+
+            if ($existingActivity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Activity already exists for this month'
+                ]);
+            }
+
+            \App\Models\MonthlyActivity::create([
+                'user_id' => $userId,
+                'title' => $request->title,
+                'description' => $request->description,
+                'month' => Carbon::parse($request->month)->startOfMonth()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Monthly activity added successfully!'
+            ]);
+
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle duplicate entry error specifically
+            if ($e->getCode() == 23000) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Activity already exists for this month'
+                ]);
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Toggle activity completion by title and date.
+     */
+    public function toggleActivityByTitleDate(Request $request)
+    {
+        try {
+            $request->validate([
+                'title' => 'required|string',
+                'activity_date' => 'required|date',
+                'completed' => 'required'
+            ]);
+
+            // Convert string boolean to actual boolean
+            $completedValue = $request->input('completed');
+            if (in_array(strtolower($completedValue), ['true', '1', 'yes', 'on'])) {
+                $completed = true;
+            } elseif (in_array(strtolower($completedValue), ['false', '0', 'no', 'off'])) {
+                $completed = false;
+            } else {
+                $completed = filter_var($completedValue, FILTER_VALIDATE_BOOLEAN);
+            }
+
+            $userId = Auth::id();
+            
+            // For testing, if no user, use user ID 1
+            if (!$userId) {
+                $userId = 1;
+            }
+
+            // Find the monthly activity by title and month
+            $carbonMonth = Carbon::parse($request->activity_date);
+            $year = $carbonMonth->year;
+            $monthNum = $carbonMonth->month;
+            
+            $monthlyActivity = \App\Models\MonthlyActivity::where('user_id', $userId)
+                ->where('title', $request->title)
+                ->whereYear('month', $year)
+                ->whereMonth('month', $monthNum)
+                ->first();
+
+            if (!$monthlyActivity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Monthly activity not found'
+                ], 404);
+            }
+
+            // Find or create the completion record
+            $completion = \App\Models\MonthlyActivityCompletion::where('monthly_activity_id', $monthlyActivity->id)
+                ->where('user_id', $userId)
+                ->where('date', $request->activity_date)
+                ->first();
+
+            if ($completion) {
+                // Update existing completion
+                $completion->completed = $completed;
+                $completion->save();
+            } else {
+                // Create new completion record
+                \App\Models\MonthlyActivityCompletion::create([
+                    'monthly_activity_id' => $monthlyActivity->id,
+                    'user_id' => $userId,
+                    'date' => $request->activity_date,
+                    'completed' => $completed
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $completed ? 'Activity marked as completed!' : 'Activity marked as incomplete!'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
                 'message' => $e->getMessage()
             ], 500);
         }
