@@ -3,14 +3,25 @@
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\FeedbackController;
+use App\Models\Feedback;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    $recentFeedbacks = Feedback::orderBy('created_at', 'desc')
+        ->take(3)
+        ->get();
+    
+    return view('welcome', compact('recentFeedbacks'));
 })->name('welcome');
 
 Route::get('/contact', [ContactController::class, 'show'])->name('contact.show');
 Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
+
+// Feedback routes
+Route::get('/feedback', [FeedbackController::class, 'index'])->name('feedback.index');
+Route::get('/feedback/create', [FeedbackController::class, 'create'])->name('feedback.create');
+Route::post('/feedback', [FeedbackController::class, 'store'])->name('feedback.store');
 
 
 Route::get('/dashboard', [ActivityController::class, 'index'])->middleware('auth')->name('dashboard');

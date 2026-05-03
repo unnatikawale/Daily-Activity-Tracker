@@ -509,6 +509,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#contact">Contact</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#testimonials">Feedback</a>
+                    </li>
                 </ul>
                 <div class="ms-3">
                     @guest
@@ -648,65 +651,46 @@
     <section id="testimonials" class="testimonials-section">
         <div class="container">
             <h2 class="section-title text-white" data-aos="fade-up">What Our Users Say</h2>
-            <p class="section-subtitle text-white" data-aos="fade-up" data-aos-delay="100">Real stories from real people achieving their goals</p>
+            <p class="section-subtitle text-white" data-aos="fade-up" data-aos-delay="100">Real feedback from our amazing community</p>
             <div class="row g-4">
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
-                    <div class="testimonial-card">
-                        <div class="stars mb-3">
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                        </div>
-                        <p class="testimonial-text">"This app has completely transformed how I organize my daily tasks. I'm more productive than ever!"</p>
-                        <div class="user-info">
-                            <img src="https://images.unsplash.com/photo-1494790108755-2616b612b786?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80" class="user-avatar" alt="Sarah Johnson" onerror="this.src='https://picsum.photos/seed/sarah/100/100.jpg'">
-                            <div class="user-details">
-                                <h6>Sarah Johnson</h6>
-                                <small>Marketing Manager</small>
+                @if($recentFeedbacks->count() > 0)
+                    @foreach($recentFeedbacks as $index => $feedback)
+                        <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="{{ ($index + 1) * 100 }}">
+                            <div class="testimonial-card">
+                                <div class="stars mb-3">
+                                    @for($i = 1; $i <= 5; $i++)
+                                        @if($i <= $feedback->rating)
+                                            <i class="fas fa-star"></i>
+                                        @else
+                                            <i class="far fa-star"></i>
+                                        @endif
+                                    @endfor
+                                </div>
+                                <p class="testimonial-text">"{{ $feedback->message }}"</p>
+                                <div class="user-info">
+                                    <img src="https://picsum.photos/seed/{{ Str::slug($feedback->name) }}/100/100.jpg" class="user-avatar" alt="{{ $feedback->name }}">
+                                    <div class="user-details">
+                                        <h6>{{ $feedback->name }}</h6>
+                                        <small>Verified User</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
-                    <div class="testimonial-card">
-                        <div class="stars mb-3">
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                        </div>
-                        <p class="testimonial-text">"Simple, intuitive, and exactly what I needed to track my daily activities. Highly recommended!"</p>
-                        <div class="user-info">
-                            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80" class="user-avatar" alt="Mike Chen" onerror="this.src='https://picsum.photos/seed/mike/100/100.jpg'">
-                            <div class="user-details">
-                                <h6>Mike Chen</h6>
-                                <small>Software Developer</small>
-                            </div>
+                    @endforeach
+                @else
+                    <div class="col-12 text-center" data-aos="fade-up">
+                        <div class="testimonial-card">
+                            <i class="fas fa-comment-slash fa-4x text-white mb-4"></i>
+                            <h4 class="text-white mb-3">No Feedbacks Yet</h4>
+                            <p class="text-white mb-4">Be the first to share your experience with our Daily Activity Tracker!</p>
                         </div>
                     </div>
-                </div>
-                <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
-                    <div class="testimonial-card">
-                        <div class="stars mb-3">
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                            <i class="fas fa-star"></i>
-                        </div>
-                        <p class="testimonial-text">"The checkbox feature makes it so satisfying to complete tasks. I love seeing my progress!"</p>
-                        <div class="user-info">
-                            <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80" class="user-avatar" alt="Emily Davis" onerror="this.src='https://picsum.photos/seed/emily/100/100.jpg'">
-                            <div class="user-details">
-                                <h6>Emily Davis</h6>
-                                <small>Freelance Designer</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                @endif
+            </div>
+            <div class="text-center mt-4">
+                <a href="{{ route('feedback.index') }}" class="btn btn-light btn-lg">
+                    <i class="fas fa-comment-dots me-2"></i>Share Your Feedback
+                </a>
             </div>
         </div>
     </section>

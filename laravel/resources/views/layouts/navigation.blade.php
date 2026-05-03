@@ -28,6 +28,12 @@
                         <i class="fas fa-chart-line me-1"></i>Dashboard
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->routeIs('feedback.*') ? 'active' : '' }}" 
+                       href="{{ route('feedback.index') }}">
+                        <i class="fas fa-comment-dots me-1"></i>Feedback
+                    </a>
+                </li>
             </ul>
             
             <ul class="navbar-nav">
