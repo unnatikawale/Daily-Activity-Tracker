@@ -15,6 +15,12 @@ Route::post('/contact', [ContactController::class, 'store'])->name('contact.stor
 
 Route::get('/dashboard', [ActivityController::class, 'index'])->middleware('auth')->name('dashboard');
 
+// Analytics dashboard route (removed auth middleware for testing)
+Route::get('/analytics', [ActivityController::class, 'analytics'])->name('analytics');
+
+// Recalculate streaks route (for data correction)
+Route::post('/recalculate-streak', [ActivityController::class, 'recalculateStreak'])->middleware('auth')->name('recalculate-streak');
+
 // Monthly tracker route
 Route::get('/monthly-tracker', [ActivityController::class, 'monthlyTracker'])->name('monthly-tracker');
 

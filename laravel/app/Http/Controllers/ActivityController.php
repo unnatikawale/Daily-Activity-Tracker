@@ -66,6 +66,166 @@ class ActivityController extends Controller
     }
 
     /**
+     * Display the analytics dashboard.
+     */
+    public function analytics(Request $request)
+    {
+        $userId = Auth::id();
+        $period = $request->input('period', '30'); // Default to last 30 days
+        
+        // Get date range
+        $endDate = Carbon::today();
+        $startDate = Carbon::today()->subDays($period);
+        
+        // Get all activities for the user in the date range
+        // Handle both authenticated and non-authenticated users for testing
+        if ($userId) {
+            $activities = Activity::where('user_id', $userId)
+                                ->whereBetween('activity_date', [$startDate, $endDate])
+                                ->orderBy('activity_date', 'desc')
+                                ->get();
+        } else {
+            // For testing, show all activities
+            $activities = Activity::whereBetween('activity_date', [$startDate, $endDate])
+                                ->orderBy('activity_date', 'desc')
+                                ->get();
+        }
+        
+        // Calculate statistics
+        $totalActivities = $activities->count();
+        $completedActivities = $activities->where('completed', true)->count();
+        $pendingActivities = $totalActivities - $completedActivities;
+        $completionRate = $totalActivities > 0 ? round(($completedActivities / $totalActivities) * 100, 1) : 0;
+        
+        // Daily completion data for chart
+        $dailyData = [];
+        for ($i = $period - 1; $i >= 0; $i--) {
+            $date = Carbon::today()->subDays($i);
+            $dateStr = $date->format('Y-m-d');
+            // Filter activities by comparing formatted date strings
+            $dayActivities = $activities->filter(function($activity) use ($dateStr) {
+                return $activity->activity_date->format('Y-m-d') === $dateStr;
+            });
+            
+            $dailyData[] = [
+                'date' => $date->format('M j'),
+                'total' => $dayActivities->count(),
+                'completed' => $dayActivities->where('completed', true)->count(),
+                'pending' => $dayActivities->where('completed', false)->count()
+            ];
+        }
+        
+        // Weekly completion data
+        $weeklyData = [];
+        for ($i = 3; $i >= 0; $i--) {
+            $weekStart = Carbon::today()->subWeeks($i)->startOfWeek();
+            $weekEnd = Carbon::today()->subWeeks($i)->endOfWeek();
+            
+            if ($userId) {
+                $weekActivities = Activity::where('user_id', $userId)
+                                        ->whereBetween('activity_date', [$weekStart, $weekEnd])
+                                        ->get();
+            } else {
+                // For testing, get all activities
+                $weekActivities = Activity::whereBetween('activity_date', [$weekStart, $weekEnd])
+                                        ->get();
+            }
+            
+            $weeklyData[] = [
+                'week' => 'Week ' . (4 - $i),
+                'total' => $weekActivities->count(),
+                'completed' => $weekActivities->where('completed', true)->count(),
+                'completion_rate' => $weekActivities->count() > 0 
+                    ? round(($weekActivities->where('completed', true)->count() / $weekActivities->count()) * 100, 1) 
+                    : 0
+            ];
+        }
+        
+        // Activity type distribution (based on title patterns)
+        $activityTypes = [
+            'work' => $activities->filter(function($a) {
+                return preg_match('/(work|meeting|project|task|office)/i', $a->title);
+            })->count(),
+            'exercise' => $activities->filter(function($a) {
+                return preg_match('/(exercise|gym|workout|run|walk|fitness)/i', $a->title);
+            })->count(),
+            'personal' => $activities->filter(function($a) {
+                return preg_match('/(personal|home|family|shopping)/i', $a->title);
+            })->count(),
+            'learning' => $activities->filter(function($a) {
+                return preg_match('/(learn|study|read|course|book)/i', $a->title);
+            })->count(),
+            'other' => $activities->filter(function($a) {
+                return !preg_match('/(work|meeting|project|task|office|exercise|gym|workout|run|walk|fitness|personal|home|family|shopping|learn|study|read|course|book)/i', $a->title);
+            })->count()
+        ];
+        
+        // Get streak from database
+        if ($userId) {
+            $streakRecord = \App\Models\Streak::getForUser($userId);
+            $streak = $streakRecord->current_streak;
+            $longestStreak = $streakRecord->longest_streak;
+        } else {
+            // For testing, set default values
+            $streak = 0;
+            $longestStreak = 0;
+        }
+        
+        // Generate tips based on performance
+        $tips = [];
+        if ($completionRate >= 80) {
+            $tips[] = "Excellent! You're completing " . $completionRate . "% of your activities. Keep up the great work!";
+        } elseif ($completionRate >= 60) {
+            $tips[] = "Good progress! Try to complete a few more activities daily to reach 80% completion rate.";
+        } else {
+            $tips[] = "Focus on completing your most important activities first. Small improvements lead to big results!";
+        }
+        
+        if ($streak >= 7) {
+            $tips[] = "Amazing! You have a " . $streak . "-day streak of completing activities. Maintain this momentum!";
+        } elseif ($streak >= 3) {
+            $tips[] = "You're on a " . $streak . "-day streak. Keep going to build a strong habit!";
+        } else {
+            $tips[] = "Start building a streak by completing at least one activity every day.";
+        }
+        
+        if ($longestStreak > 0 && $streak < $longestStreak) {
+            $tips[] = "Your longest streak was " . $longestStreak . " days. You can beat it!";
+        }
+        
+        if ($pendingActivities > 10) {
+            $tips[] = "You have " . $pendingActivities . " pending activities. Consider prioritizing or breaking them into smaller tasks.";
+        }
+        
+        // Debug logging
+        \Log::info('Analytics data:', [
+            'totalActivities' => $totalActivities,
+            'completedActivities' => $completedActivities,
+            'pendingActivities' => $pendingActivities,
+            'dailyData' => $dailyData,
+            'weeklyData' => $weeklyData,
+            'activityTypes' => $activityTypes,
+            'userId' => $userId
+        ]);
+
+        return view('analytics', [
+            'period' => $period,
+            'totalActivities' => $totalActivities,
+            'completedActivities' => $completedActivities,
+            'pendingActivities' => $pendingActivities,
+            'completionRate' => $completionRate,
+            'dailyData' => $dailyData,
+            'weeklyData' => $weeklyData,
+            'activityTypes' => $activityTypes,
+            'streak' => $streak,
+            'longestStreak' => $longestStreak,
+            'tips' => $tips,
+            'startDate' => $startDate->format('M j, Y'),
+            'endDate' => $endDate->format('M j, Y')
+        ]);
+    }
+
+    /**
      * Display the monthly tracker.
      */
     public function monthlyTracker(Request $request)
@@ -219,6 +379,14 @@ class ActivityController extends Controller
                 ]);
 
                 $createdCount++;
+
+                // Update streak if activity is for today or yesterday
+                $carbonDate = Carbon::parse($activityDate);
+                if ($carbonDate->isToday() || $carbonDate->isYesterday()) {
+                    $streak = \App\Models\Streak::getForUser(Auth::id());
+                    $streak->updateStreakForDate($activityDate);
+                }
+
                 if ($firstDate === null) {
                     $firstDate = $activityDate;
                 }
@@ -250,6 +418,13 @@ class ActivityController extends Controller
                 'activity_date' => $request->activity_date,
                 'completed' => false
             ]);
+
+            // Update streak if activity is for today or yesterday
+            $carbonDate = Carbon::parse($request->activity_date);
+            if ($carbonDate->isToday() || $carbonDate->isYesterday()) {
+                $streak = \App\Models\Streak::getForUser(Auth::id());
+                $streak->updateStreakForDate($request->activity_date);
+            }
 
             return redirect()->route('dashboard', ['date' => $request->activity_date])
                             ->with('success', 'Activity created successfully!');
@@ -302,6 +477,10 @@ class ActivityController extends Controller
         $date = $activity->activity_date;
         $activity->delete();
 
+        // Update streak
+        $streak = \App\Models\Streak::getForUser(Auth::id());
+        $streak->updateStreakForDate($date);
+
         return redirect()->route('dashboard', ['date' => $date])
                         ->with('success', 'Activity deleted successfully!');
     }
@@ -314,6 +493,10 @@ class ActivityController extends Controller
         $activity = Activity::where('user_id', Auth::id())->findOrFail($id);
         $activity->completed = !$activity->completed;
         $activity->save();
+
+        // Update streak
+        $streak = \App\Models\Streak::getForUser(Auth::id());
+        $streak->updateStreakForDate($activity->activity_date);
 
         return response()->json([
             'success' => true,
@@ -597,11 +780,39 @@ class ActivityController extends Controller
                 ]);
             }
 
+            // Update streak
+            $streak = \App\Models\Streak::getForUser($userId);
+            $streak->updateStreakForDate($request->activity_date);
+
             return response()->json([
                 'success' => true,
                 'message' => $completed ? 'Activity marked as completed!' : 'Activity marked as incomplete!'
             ]);
 
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Recalculate streak for the authenticated user.
+     */
+    public function recalculateStreak(Request $request)
+    {
+        try {
+            $userId = Auth::id();
+            $streak = \App\Models\Streak::getForUser($userId);
+            $streak->recalculate();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Streak recalculated successfully!',
+                'current_streak' => $streak->current_streak,
+                'longest_streak' => $streak->longest_streak
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

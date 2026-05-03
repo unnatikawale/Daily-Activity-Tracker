@@ -22,6 +22,12 @@
                         <i class="fas fa-calendar-alt me-1"></i>Monthly Tracker
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->routeIs('analytics') ? 'active' : '' }}" 
+                       href="{{ route('analytics') }}">
+                        <i class="fas fa-chart-line me-1"></i>Dashboard
+                    </a>
+                </li>
             </ul>
             
             <ul class="navbar-nav">
