@@ -515,7 +515,7 @@
                 </ul>
                 <div class="ms-3">
                     @guest
-                        <a href="{{ route('login') }}" class="btn btn-outline-light me-2">Sign In</a>
+                        <a href="{{ route('login') }}" class="btn btn-outline-dark me-2">Sign In</a>
                         <a href="{{ route('register') }}" class="btn btn-primary">Sign Up</a>
                     @else
                         <a href="{{ url('/dashboard') }}" class="btn btn-primary">Dashboard</a>
